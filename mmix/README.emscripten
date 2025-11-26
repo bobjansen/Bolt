@@ -1,0 +1,104 @@
+# Building MMIXware with Emscripten
+
+This directory contains change files to build MMIXware with Emscripten, allowing
+the MMIX tools to run in JavaScript environments (Node.js and web browsers).
+
+## Prerequisites
+
+1. **CWEB** (version 3.0 or greater)
+   - Install from: http://www-cs-faculty.stanford.edu/~knuth/cweb.html
+   - Or use your package manager: `apt-get install cweb` or `brew install cweb`
+
+2. **Emscripten**
+   - Install from: https://emscripten.org/docs/getting_started/downloads.html
+   - Follow the instructions to set up the Emscripten SDK
+
+## Build Instructions
+
+### Quick Start
+
+Run the build script:
+
+```bash
+./build-emscripten.sh
+```
+
+This will:
+1. Generate C files from CWEB sources (applying change files where available)
+2. Compile with Emscripten to produce JavaScript/WebAssembly binaries
+
+### Manual Build
+
+If you prefer to build manually or use the Makefile with change file:
+
+```bash
+# Generate modified Makefile
+# (Note: Currently, you'll need to manually apply Makefile.ch changes)
+
+# Generate C files
+ctangle abstime.w abstime.ch
+ctangle mmix-arith.w
+ctangle mmix-io.w
+ctangle mmixal.w
+# ... etc for other .w files
+
+# Build with emcc
+emcc -O2 abstime.c -o abstime.js
+node abstime.js > abstime.h
+emcc -O2 -c mmix-arith.c
+emcc -O2 -c mmix-io.c
+emcc -O2 mmixal.c mmix-arith.o -o mmixal.js
+# ... etc
+```
+
+## Change Files
+
+The following change files have been created to support Emscripten:
+
+- **Makefile.ch** - Modifies the Makefile to use `emcc` instead of `gcc` and
+  generates `.js`/`.wasm` outputs instead of native binaries
+
+- **abstime.ch** - Documents the Emscripten adaptation of abstime
+
+Additional change files may be needed for specific platform issues.
+
+## Usage
+
+After building, you can run the tools with Node.js:
+
+```bash
+# Assemble a program
+node mmixal.js -l copy.lst copy.mms
+
+# Run the simulator
+node mmix.js copy copy.mms
+
+# Use mmotype
+node mmotype.js input.mmo
+```
+
+## Notes
+
+- The original source files remain unchanged, as required by Knuth's license
+- All modifications are made through CWEB change files
+- The JavaScript versions use Emscripten's filesystem API (NODEFS) for file I/O
+- For browser usage, additional wrapper HTML/JS may be needed
+
+## Troubleshooting
+
+**Error: emcc not found**
+- Make sure Emscripten is installed and activated
+- Run `source /path/to/emsdk/emsdk_env.sh` to set up the environment
+
+**Error: ctangle not found**
+- Install CWEB tools
+
+**File I/O issues**
+- The Node.js versions use NODEFS for filesystem access
+- Make sure files are in the current working directory or use absolute paths
+
+## License
+
+The original MMIXware sources are copyrighted by Donald Knuth. The change files
+in this directory are provided to facilitate Emscripten compilation while
+respecting the original license terms (see boilerplate.w).
