@@ -1,0 +1,7 @@
+mmix/*.c
+mmix/*.h
+mmix/*.js
+mmix/*.o
+mmix/*.lst
+mmix/*.mmo
+mmix/*.wasm
