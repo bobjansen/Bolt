@@ -1,0 +1,124 @@
+# Building MMIXware
+
+This document explains how to build the MMIXware programs and documentation.
+
+## Prerequisites
+
+### Required for building executables
+
+- **CWEB** (version 3.0 or greater): For generating C code from .w files
+  ```bash
+  sudo apt-get install cweb
+  ```
+
+- **C compiler**: Either gcc or clang
+  ```bash
+  sudo apt-get install build-essential  # for gcc
+  # OR
+  sudo apt-get install clang
+  ```
+
+### Required for building documentation
+
+- **TeX Live plain packages**: For TeX macros needed by CWEB documentation
+  ```bash
+  sudo apt-get install texlive-plain-generic
+  ```
+
+- **dvips**: For converting DVI to PostScript (usually included with TeX Live)
+  ```bash
+  sudo apt-get install texlive-binaries
+  ```
+
+## Building
+
+### Build executables only
+
+```bash
+make all
+```
+
+Or use the build script with clang:
+```bash
+./build-native.sh
+```
+
+This creates:
+- `mmixal` - MMIX assembler
+- `mmix` - MMIX simulator
+- `mmotype` - MMIX object file utility
+- `mmmix` - MMIX pipelined meta-simulator
+
+### Build documentation
+
+```bash
+make doc
+```
+
+This creates:
+- `mmix-doc.ps` - Complete MMIX architecture documentation
+- `mmixal-intro.ps` - MMIXAL assembler introduction (first 13 pages)
+- `mmix-sim-intro.ps` - MMIX simulator introduction (first 8 pages)
+
+Also creates intermediate files:
+- `mmixal.dvi`, `mmix-sim.dvi` - Full documentation in DVI format
+
+### Build everything
+
+```bash
+make all
+make doc
+```
+
+Note: `make all` does NOT build documentation - you must run `make doc` separately.
+
+## Building with Emscripten
+
+To build JavaScript/WebAssembly versions:
+
+```bash
+./build-emscripten.sh
+```
+
+See `README.emscripten` for details.
+
+## Change Files
+
+The build system uses CWEB change files (`.ch`) to apply modifications without
+changing the original source files:
+
+- `abstime.ch` - Fixes C99 compatibility for abstime utility
+- `mmixal.ch` - Fixes C99 compatibility for mmixal main()
+- `mmix-sim.ch` - Fixes C99 compatibility for mmix-sim main()
+- `mmotype.ch` - Fixes C99 compatibility for mmotype main()
+- `mmmix.ch` - Fixes duplicate symbol for Emscripten builds
+
+The Makefile automatically applies change files when they exist.
+
+## Troubleshooting
+
+### "I can't find file `cwebmac`" error
+
+Install the TeX Live plain generic package:
+```bash
+sudo apt-get install texlive-plain-generic
+```
+
+### Build warnings
+
+The build produces many warnings about K&R-style function definitions.
+These are normal and do not prevent successful compilation. The change
+files fix the most critical warnings in the main() functions.
+
+### Modified .c files after build
+
+Some `.c` files (like `abstime.c`, `mmixal.c`, `mmix-sim.c`) are tracked
+by git but get regenerated during builds with change files applied.
+Before committing, revert these files:
+
+```bash
+git checkout abstime.c mmixal.c mmix-sim.c
+```
+
+The `.gitignore` file is configured to ignore build artifacts but NOT
+these tracked `.c` files, so you must revert them manually.

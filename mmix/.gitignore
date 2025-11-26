@@ -21,6 +21,16 @@ abstime
 *.mmb
 *.mml
 
+# Documentation build outputs (from make doc)
+*.dvi
+*.ps
+*.pdf
+*.tex
+*.log
+*.toc
+*.idx
+*.scn
+
 # Backup and temporary files
 *~
 *.bak
