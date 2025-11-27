@@ -70,7 +70,7 @@ header .subtitle {
 }
 
 #args-display {
-    display: flex;
+    display: none;
     align-items: center;
     gap: 12px;
     padding: 10px 0;

@@ -27,11 +27,23 @@
                     <input type="file" id="import-file-input" accept=".mms,.mmixal" style="display: none;">
                     <input type="file" id="upload-data-file-input" style="display: none;">
                 </div>
-                <div id="args-display" style="display: none;">
+                <div id="args-display">
                     <label>Args:</label>
                     <input type="text" id="args-display-value" readonly>
                     <button id="edit-args-btn" class="btn btn-secondary">Edit</button>
                 </div>
+                <script>
+                    // Immediately set args display state to prevent content jump
+                    (function() {
+                        const argsDisplay = document.getElementById('args-display');
+                        const savedArgs = localStorage.getItem('mmix.currentArgs');
+                        if (savedArgs && savedArgs.trim()) {
+                            argsDisplay.style.display = 'flex';
+                        } else {
+                            argsDisplay.style.display = 'none';
+                        }
+                    })();
+                </script>
                 <textarea id="code-editor" spellcheck="false" placeholder="Enter MMIX assembly code here...
 
 Example:
@@ -135,6 +147,6 @@ String  BYTE &quot;Hello, World!&quot;,#a,0
         </div>
     </div>
 
-    <script type="py" src="mmix-playground.py?v=17" config="pyscript.toml"></script>
+    <script type="py" src="mmix-playground.py?v=19" config="pyscript.toml"></script>
 </body>
 </html>
