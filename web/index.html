@@ -18,6 +18,9 @@
         <div id="main-content">
             <div id="editor-section">
                 <div id="toolbar">
+                    <button id="assemble-run-btn" class="btn btn-primary">Assemble &amp; Run</button>
+                    <button id="assemble-btn" class="btn btn-secondary">Assemble</button>
+                    <button id="run-btn" class="btn btn-success" disabled>Run</button>
                     <label for="examples">Examples:</label>
                     <select id="examples">
                         <option value="">-- Select an example --</option>
@@ -25,9 +28,6 @@
                         <option value="fibonacci">Fibonacci Numbers</option>
                         <option value="copy">Copy Program</option>
                     </select>
-                    <button id="assemble-btn" class="btn btn-primary">Assemble</button>
-                    <button id="run-btn" class="btn btn-success" disabled>Run</button>
-                    <button id="clear-btn" class="btn btn-secondary">Clear Output</button>
                 </div>
                 <textarea id="code-editor" spellcheck="false" placeholder="Enter MMIX assembly code here...
 
@@ -75,6 +75,6 @@ String  BYTE &quot;Hello, World!&quot;,#a,0
     }
     </script>
 
-    <script type="py" src="mmix-playground.py" config="pyscript.toml"></script>
+    <script type="py" src="mmix-playground.py?v=4" config="pyscript.toml"></script>
 </body>
 </html>

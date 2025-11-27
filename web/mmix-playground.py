@@ -30,6 +30,10 @@ class MMIXPlayground:
 
     def setup_ui(self):
         """Set up UI event handlers"""
+        # Assemble & Run button
+        assemble_run_btn = document.getElementById("assemble-run-btn")
+        assemble_run_btn.onclick = create_proxy(self.on_assemble_run_click)
+
         # Assemble button
         assemble_btn = document.getElementById("assemble-btn")
         assemble_btn.onclick = create_proxy(self.on_assemble_click)
@@ -37,10 +41,6 @@ class MMIXPlayground:
         # Run button
         run_btn = document.getElementById("run-btn")
         run_btn.onclick = create_proxy(self.on_run_click)
-
-        # Clear button
-        clear_btn = document.getElementById("clear-btn")
-        clear_btn.onclick = create_proxy(self.on_clear_click)
 
         # Example selector
         examples_select = document.getElementById("examples")
@@ -50,6 +50,10 @@ class MMIXPlayground:
         tabs = document.querySelectorAll(".tab")
         for tab in tabs:
             tab.onclick = create_proxy(self.on_tab_click)
+
+        # Keyboard shortcut: Ctrl-Enter to assemble & run
+        code_editor = document.getElementById("code-editor")
+        code_editor.onkeydown = create_proxy(self.on_editor_keydown)
 
         console.log("UI event handlers set up")
 
@@ -318,6 +322,20 @@ class MMIXPlayground:
                 "output": ""
             }
 
+    def on_assemble_run_click(self, event):
+        """Handle assemble & run button click"""
+        if not self.mmixal_factory or not self.mmix_factory:
+            self.show_error("MMIX modules not loaded yet. Please wait...")
+            return
+
+        code = document.getElementById("code-editor").value
+        if not code.strip():
+            self.show_error("Please enter some MMIX code to assemble.")
+            return
+
+        # Launch async assemble & run
+        asyncio.ensure_future(self._do_assemble_and_run(code))
+
     def on_assemble_click(self, event):
         """Handle assemble button click"""
         if not self.mmixal_factory:
@@ -331,6 +349,13 @@ class MMIXPlayground:
 
         # Launch async assembly
         asyncio.ensure_future(self._do_assemble(code))
+
+    def on_editor_keydown(self, event):
+        """Handle keydown events in code editor"""
+        # Check for Ctrl-Enter (or Cmd-Enter on Mac)
+        if (event.ctrlKey or event.metaKey) and event.key == "Enter":
+            event.preventDefault()
+            self.on_assemble_run_click(event)
 
     async def _do_assemble(self, code):
         """Async assembly handler"""
@@ -356,6 +381,55 @@ class MMIXPlayground:
             self.show_error(error_msg)
             self.show_status("Assembly failed", "error")
             document.getElementById("run-btn").disabled = True
+
+    async def _do_assemble_and_run(self, code):
+        """Async assemble and run handler"""
+        self.show_status("Assembling...")
+
+        # Switch to output tab immediately to prevent flash
+        self.switch_tab("output")
+
+        # Clear previous outputs
+        self.clear_output()
+
+        # Assemble
+        result = await self.assemble(code)
+
+        if not result["success"]:
+            error_msg = result.get("error", "Assembly failed")
+            if result.get("console_output"):
+                error_msg = f"{error_msg}\n\n{result['console_output']}"
+            self.show_error(error_msg)
+            self.show_status("Assembly failed", "error")
+            document.getElementById("run-btn").disabled = True
+            self.switch_tab("errors")
+            return
+
+        # Assembly successful, populate listing but don't switch to it
+        document.getElementById("listing-output").textContent = result["listing"]
+        self.object_code = result["object_code"]
+        document.getElementById("run-btn").disabled = False
+        if result["console_output"]:
+            self.show_error(f"Assembly output:\n{result['console_output']}")
+
+        # Now run simulation
+        self.show_status("Running simulation...")
+        sim_result = await self.run_simulation(self.object_code)
+        console.log(f"Simulation result: {sim_result}")
+
+        if sim_result["success"]:
+            output_text = sim_result["output"] or "(Program completed with no output)"
+            console.log(f"Displaying output: {output_text}")
+            self.show_output(output_text)
+            self.show_status("Completed successfully!", "success")
+            self.switch_tab("output")
+        else:
+            error_msg = sim_result.get("error", "Simulation failed")
+            if sim_result.get("output"):
+                error_msg = f"{error_msg}\n\n{sim_result['output']}"
+            self.show_error(error_msg)
+            self.show_status("Simulation failed", "error")
+            self.switch_tab("errors")
 
     def on_run_click(self, event):
         """Handle run button click"""
@@ -390,11 +464,6 @@ class MMIXPlayground:
                 error_msg = f"{error_msg}\n\n{result['output']}"
             self.show_error(error_msg)
             self.show_status("Simulation failed", "error")
-
-    def on_clear_click(self, event):
-        """Handle clear button click"""
-        self.clear_output()
-        self.show_status("Output cleared")
 
     def on_example_change(self, event):
         """Handle example selection change"""
