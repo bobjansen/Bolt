@@ -231,7 +231,9 @@ class MMIXPlayground:
             js.eval("""
                 window.mmixOutputCapture = [];
                 window.mmixOutCallback = function(text) {
-                    window.mmixOutputCapture.push(text);
+                    console.log('[mmixOutCallback] called with:', JSON.stringify(text), 'charCode:', text.charCodeAt(0));
+                    // Since newlines aren't being passed through, add them after each call
+                    window.mmixOutputCapture.push(text + '\\n');
                 };
             """)
 
@@ -285,8 +287,11 @@ class MMIXPlayground:
             # Convert to Python list and join
             output_parts = []
             for i in range(len(captured)):
-                output_parts.append(str(captured[i]))
+                part = str(captured[i])
+                console.log(f"Output part {i}: {repr(part)}")
+                output_parts.append(part)
             output = "".join(output_parts)
+            console.log(f"Joined output: {repr(output)}")
 
             if not output:
                 output = "(Program completed with no output)"
