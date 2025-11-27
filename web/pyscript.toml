@@ -1,0 +1,10 @@
+[interpreters.main]
+src = "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js"
+
+[[fetch]]
+files = [
+    "../mmix/mmixal.js",
+    "../mmix/mmixal.wasm",
+    "../mmix/mmix.js",
+    "../mmix/mmix.wasm"
+]

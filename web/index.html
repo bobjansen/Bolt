@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MMIX Playground</title>
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="container">
+        <header>
+            <h1>MMIX Interactive Playground</h1>
+            <p class="subtitle">Write, assemble, and run MMIX assembly code in your browser</p>
+        </header>
+
+        <div id="main-content">
+            <div id="editor-section">
+                <div id="toolbar">
+                    <label for="examples">Examples:</label>
+                    <select id="examples">
+                        <option value="">-- Select an example --</option>
+                        <option value="hello">Hello World</option>
+                        <option value="fibonacci">Fibonacci Numbers</option>
+                        <option value="copy">Copy Program</option>
+                    </select>
+                    <button id="assemble-btn" class="btn btn-primary">Assemble</button>
+                    <button id="run-btn" class="btn btn-success" disabled>Run</button>
+                    <button id="clear-btn" class="btn btn-secondary">Clear Output</button>
+                </div>
+                <textarea id="code-editor" spellcheck="false" placeholder="Enter MMIX assembly code here...
+
+Example:
+        LOC  #100
+Main    GETA $255,String
+        TRAP 0,Fputs,StdOut
+        TRAP 0,Halt,0
+String  BYTE &quot;Hello, World!&quot;,#a,0
+"></textarea>
+            </div>
+
+            <div id="output-section">
+                <div id="tabs">
+                    <button class="tab active" data-tab="listing">Assembly Listing</button>
+                    <button class="tab" data-tab="output">Simulation Output</button>
+                    <button class="tab" data-tab="errors">Messages</button>
+                </div>
+                <pre id="listing-output" class="output-pane active"></pre>
+                <pre id="simulation-output" class="output-pane"></pre>
+                <pre id="error-output" class="output-pane"></pre>
+            </div>
+        </div>
+
+        <footer>
+            <p>MMIX Architecture by Donald E. Knuth | Web Playground powered by PyScript and Emscripten</p>
+        </footer>
+    </div>
+
+    <!-- Example programs -->
+    <script type="application/json" id="example-programs">
+    {
+        "hello": {
+            "name": "Hello World",
+            "code": "        LOC  #100\nMain    GETA $255,String\n        TRAP 0,Fputs,StdOut\n        TRAP 0,Halt,0\nString  BYTE \"Hello, World!\",#a,0\n"
+        },
+        "fibonacci": {
+            "name": "Fibonacci Numbers",
+            "code": "        LOC  #100\n% Compute first 10 Fibonacci numbers\nMain    SET  $0,0        First Fibonacci number\n        SET  $1,1        Second Fibonacci number\n        SET  $2,10       Counter\n        GETA $255,Format Output format string\n1H      LDA  $255,Format\n        SET  $3,$0       Save current for output\n        TRAP 0,Fputs,StdOut\n        ADD  $3,$0,$1    Next = current + previous\n        SET  $0,$1       Shift values\n        SET  $1,$3\n        SUB  $2,$2,1     Decrement counter\n        BP   $2,1B       Loop if positive\n        TRAP 0,Halt,0\nFormat  BYTE \"Fib: %d\",#a,0\n"
+        },
+        "copy": {
+            "name": "Copy Program",
+            "code": "% SAMPLE PROGRAM: COPY A GIVEN FILE TO STANDARD OUTPUT\n\nt        IS   $255\nargc     IS   $0\nargv     IS   $1\ns        IS   $2\nBuf_Size IS   5                 ridiculously small for testing\n         LOC  Data_Segment\nBuffer   LOC  @+Buf_Size\n         GREG @\nArg0     OCTA 0,TextRead\nArg1     OCTA Buffer,Buf_Size\n      \n         LOC  #200              main(argc,argv) {\nMain     CMP  t,argc,2          if (argc==2) goto openit\n         PBZ  t,OpenIt\n         GETA t,1F              fputs(\"Usage: \",stderr)\n         TRAP 0,Fputs,StdErr\n         LDOU t,argv,0          fputs(argv[0],stderr)\n         TRAP 0,Fputs,StdErr\n         GETA t,2F              fputs(\" filename\\n\",stderr)\nQuit     TRAP 0,Fputs,StdErr    \n         NEG  t,0,1             quit: exit(-1)\n         TRAP 0,Halt,0\n1H       BYTE \"Usage: \",0\n         LOC  (@+3)&-4          align to tetrabyte\n2H       BYTE \" filename\",#a,0\n\nOpenIt   LDOU s,argv,8          openit: s=argv[1]\n         STOU s,Arg0\n         LDA  t,Arg0            t=&Arg0\n         TRAP 0,Fopen,3         fopen(Arg0.name,Arg0.mode,handle)\n         BN   t,Quit            if (t<0) quit()\n"
+        }
+    }
+    </script>
+
+    <script type="py" src="mmix-playground.py" config="pyscript.toml"></script>
+</body>
+</html>
