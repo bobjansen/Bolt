@@ -2,7 +2,118 @@ import js
 import json
 import asyncio
 from pyodide.ffi import create_proxy, to_js
-from js import console, document
+from js import console, document, localStorage, Blob, URL
+
+class StorageManager:
+    """Manages localStorage for persistent code and file storage"""
+
+    def __init__(self):
+        self.CURRENT_CODE_KEY = "mmix.currentCode"
+        self.PROGRAMS_KEY = "mmix.programs"
+        self.FILES_KEY = "mmix.uploadedFiles"
+
+    def save_current_code(self, code):
+        """Auto-save current code"""
+        try:
+            localStorage.setItem(self.CURRENT_CODE_KEY, code)
+        except Exception as e:
+            console.error(f"Error saving current code: {e}")
+
+    def load_current_code(self):
+        """Load auto-saved code"""
+        try:
+            code = localStorage.getItem(self.CURRENT_CODE_KEY)
+            return code if code else ""
+        except Exception as e:
+            console.error(f"Error loading current code: {e}")
+            return ""
+
+    def save_program(self, name, code):
+        """Save a named program"""
+        try:
+            programs = self.get_programs()
+            # Update if exists, otherwise add
+            found = False
+            for prog in programs:
+                if prog["name"] == name:
+                    prog["code"] = code
+                    prog["timestamp"] = js.Date.now()
+                    found = True
+                    break
+            if not found:
+                programs.append({
+                    "name": name,
+                    "code": code,
+                    "timestamp": js.Date.now()
+                })
+            localStorage.setItem(self.PROGRAMS_KEY, json.dumps(programs))
+            return True
+        except Exception as e:
+            console.error(f"Error saving program: {e}")
+            return False
+
+    def get_programs(self):
+        """Get all saved programs"""
+        try:
+            programs_json = localStorage.getItem(self.PROGRAMS_KEY)
+            if programs_json:
+                return json.loads(programs_json)
+            return []
+        except Exception as e:
+            console.error(f"Error getting programs: {e}")
+            return []
+
+    def delete_program(self, name):
+        """Delete a saved program"""
+        try:
+            programs = self.get_programs()
+            programs = [p for p in programs if p["name"] != name]
+            localStorage.setItem(self.PROGRAMS_KEY, json.dumps(programs))
+            return True
+        except Exception as e:
+            console.error(f"Error deleting program: {e}")
+            return False
+
+    def save_uploaded_file(self, filename, content):
+        """Save an uploaded file"""
+        try:
+            files = self.get_uploaded_files()
+            # Update if exists, otherwise add
+            found = False
+            for f in files:
+                if f["name"] == filename:
+                    f["content"] = content
+                    found = True
+                    break
+            if not found:
+                files.append({"name": filename, "content": content})
+            localStorage.setItem(self.FILES_KEY, json.dumps(files))
+            return True
+        except Exception as e:
+            console.error(f"Error saving uploaded file: {e}")
+            return False
+
+    def get_uploaded_files(self):
+        """Get all uploaded files"""
+        try:
+            files_json = localStorage.getItem(self.FILES_KEY)
+            if files_json:
+                return json.loads(files_json)
+            return []
+        except Exception as e:
+            console.error(f"Error getting uploaded files: {e}")
+            return []
+
+    def delete_uploaded_file(self, filename):
+        """Delete an uploaded file"""
+        try:
+            files = self.get_uploaded_files()
+            files = [f for f in files if f["name"] != filename]
+            localStorage.setItem(self.FILES_KEY, json.dumps(files))
+            return True
+        except Exception as e:
+            console.error(f"Error deleting uploaded file: {e}")
+            return False
 
 class MMIXPlayground:
     """Main class for the MMIX Interactive Playground"""
@@ -12,10 +123,12 @@ class MMIXPlayground:
         self.mmix_factory = None
         self.object_code = None
         self.examples = {}
+        self.storage = StorageManager()
 
         console.log("Initializing MMIX Playground...")
         self.load_examples()
         self.setup_ui()
+        self.restore_code()
         asyncio.ensure_future(self.load_modules_async())
 
     def load_examples(self):
@@ -42,10 +155,6 @@ class MMIXPlayground:
         run_btn = document.getElementById("run-btn")
         run_btn.onclick = create_proxy(self.on_run_click)
 
-        # Example selector
-        examples_select = document.getElementById("examples")
-        examples_select.onchange = create_proxy(self.on_example_change)
-
         # Tab switching
         tabs = document.querySelectorAll(".tab")
         for tab in tabs:
@@ -55,7 +164,283 @@ class MMIXPlayground:
         code_editor = document.getElementById("code-editor")
         code_editor.onkeydown = create_proxy(self.on_editor_keydown)
 
+        # Auto-save on code changes
+        code_editor.oninput = create_proxy(self.on_code_change)
+
+        # Files button
+        document.getElementById("files-btn").onclick = create_proxy(self.on_files_click)
+        document.getElementById("files-close-btn").onclick = create_proxy(self.on_modal_cancel)
+
+        # File tabs
+        file_tabs = document.querySelectorAll(".file-tab")
+        for tab in file_tabs:
+            tab.onclick = create_proxy(self.on_file_tab_click)
+
+        # Save/Import/Export buttons
+        document.getElementById("save-confirm-btn").onclick = create_proxy(self.on_save_confirm)
+        document.getElementById("import-btn").onclick = create_proxy(self.on_import_click)
+        document.getElementById("export-btn").onclick = create_proxy(self.on_export_click)
+        document.getElementById("import-file-input").onchange = create_proxy(self.on_import_file_selected)
+
+        # Data file upload
+        document.getElementById("upload-file-btn").onclick = create_proxy(self.on_upload_file_click)
+        document.getElementById("upload-data-file-input").onchange = create_proxy(self.on_data_file_selected)
+
         console.log("UI event handlers set up")
+
+    def restore_code(self):
+        """Restore saved code from localStorage or load default example"""
+        saved_code = self.storage.load_current_code()
+        if saved_code:
+            document.getElementById("code-editor").value = saved_code
+            console.log("Restored code from localStorage")
+        elif "hello" in self.examples:
+            # Load hello example by default
+            document.getElementById("code-editor").value = self.examples["hello"]["code"]
+            console.log("Loaded default hello example")
+
+    def on_code_change(self, event):
+        """Handle code editor changes - auto-save"""
+        code = document.getElementById("code-editor").value
+        self.storage.save_current_code(code)
+
+    def on_files_click(self, event):
+        """Show files modal with all tabs"""
+        self.populate_programs_list()
+        self.populate_examples_list()
+        self.populate_data_files_list()
+        self.show_modal("files-modal")
+
+    def on_file_tab_click(self, event):
+        """Handle file tab switching"""
+        tab_name = event.target.getAttribute("data-tab")
+
+        # Update tabs
+        tabs = document.querySelectorAll(".file-tab")
+        for tab in tabs:
+            if tab.getAttribute("data-tab") == tab_name:
+                tab.classList.add("active")
+            else:
+                tab.classList.remove("active")
+
+        # Update panes
+        panes = {
+            "programs": document.getElementById("programs-pane"),
+            "examples": document.getElementById("examples-pane"),
+            "data": document.getElementById("data-pane")
+        }
+
+        for name, pane in panes.items():
+            if name == tab_name:
+                pane.classList.add("active")
+            else:
+                pane.classList.remove("active")
+
+    def on_save_confirm(self, event):
+        """Save current code with specified name"""
+        name = document.getElementById("save-name-input").value.strip()
+        if not name:
+            self.show_error("Please enter a program name")
+            return
+
+        code = document.getElementById("code-editor").value
+        if self.storage.save_program(name, code):
+            self.show_status(f"Saved program '{name}'", "success")
+            document.getElementById("save-name-input").value = ""
+            self.populate_programs_list()
+        else:
+            self.show_error("Failed to save program")
+
+    def on_import_click(self, event):
+        """Trigger file import"""
+        document.getElementById("import-file-input").click()
+
+    def on_export_click(self, event):
+        """Export current code as .mms file"""
+        code = document.getElementById("code-editor").value
+        if not code.strip():
+            self.show_error("No code to export")
+            return
+
+        # Create blob and download
+        blob = Blob.new([code], to_js({"type": "text/plain"}))
+        url = URL.createObjectURL(blob)
+
+        # Create temporary download link
+        link = document.createElement("a")
+        link.href = url
+        link.download = "program.mms"
+        link.click()
+
+        URL.revokeObjectURL(url)
+        self.show_status("Exported program.mms", "success")
+
+    def on_import_file_selected(self, event):
+        """Handle imported file"""
+        files = event.target.files
+        if files.length == 0:
+            return
+
+        file = files.item(0)  # Use .item() for JsProxy arrays
+        reader = js.FileReader.new()
+
+        def on_load(e):
+            code = e.target.result
+            document.getElementById("code-editor").value = code
+            self.storage.save_current_code(code)
+            self.show_status(f"Imported {file.name}", "success")
+
+        reader.onload = create_proxy(on_load)
+        reader.readAsText(file)
+
+    def on_upload_file_click(self, event):
+        """Trigger data file upload"""
+        document.getElementById("upload-data-file-input").click()
+
+    def on_data_file_selected(self, event):
+        """Handle uploaded data file"""
+        files = event.target.files
+        if files.length == 0:
+            return
+
+        file = files.item(0)  # Use .item() for JsProxy arrays
+        reader = js.FileReader.new()
+
+        def on_load(e):
+            content = e.target.result
+            if self.storage.save_uploaded_file(file.name, content):
+                self.show_status(f"Uploaded {file.name}", "success")
+                self.populate_data_files_list()
+            else:
+                self.show_error(f"Failed to upload {file.name}")
+
+        reader.onload = create_proxy(on_load)
+        reader.readAsText(file)
+
+
+    def populate_programs_list(self):
+        """Populate the programs list in load modal"""
+        programs = self.storage.get_programs()
+        list_div = document.getElementById("programs-list")
+
+        if len(programs) == 0:
+            list_div.innerHTML = "<p>No saved programs yet.</p>"
+            return
+
+        html_parts = []
+        for prog in programs:
+            name = prog["name"]
+            html_parts.append(f'''
+                <div class="program-item">
+                    <span class="program-name">{name}</span>
+                    <div class="program-actions">
+                        <button class="btn btn-small" onclick="playground.load_program('{name}')">Load</button>
+                        <button class="btn btn-small" onclick="playground.delete_program('{name}')">Delete</button>
+                    </div>
+                </div>
+            ''')
+
+        list_div.innerHTML = "".join(html_parts)
+
+    def populate_examples_list(self):
+        """Populate the examples list"""
+        list_div = document.getElementById("examples-list")
+
+        if len(self.examples) == 0:
+            list_div.innerHTML = "<p>No examples available.</p>"
+            return
+
+        html_parts = []
+        for key, example in self.examples.items():
+            name = example["name"]
+            html_parts.append(f'''
+                <div class="program-item">
+                    <span class="program-name">{name}</span>
+                    <div class="program-actions">
+                        <button class="btn btn-small" onclick="playground.load_example('{key}')">Load</button>
+                    </div>
+                </div>
+            ''')
+
+        list_div.innerHTML = "".join(html_parts)
+
+    def populate_data_files_list(self):
+        """Populate the uploaded data files list"""
+        files = self.storage.get_uploaded_files()
+        list_div = document.getElementById("data-files-list")
+
+        if len(files) == 0:
+            list_div.innerHTML = "<p>No uploaded files yet.</p>"
+            return
+
+        html_parts = []
+        for f in files:
+            name = f["name"]
+            html_parts.append(f'''
+                <div class="file-item">
+                    <span class="file-name">{name}</span>
+                    <div class="file-actions">
+                        <button class="btn btn-small" onclick="playground.delete_file('{name}')">Delete</button>
+                    </div>
+                </div>
+            ''')
+
+        list_div.innerHTML = "".join(html_parts)
+
+    def load_program(self, name):
+        """Load a saved program (called from JavaScript)"""
+        programs = self.storage.get_programs()
+        for prog in programs:
+            if prog["name"] == name:
+                document.getElementById("code-editor").value = prog["code"]
+                self.storage.save_current_code(prog["code"])
+                self.hide_modal("files-modal")
+                self.show_status(f"Loaded program '{name}'", "success")
+                return
+
+        self.show_error(f"Program '{name}' not found")
+
+    def load_example(self, key):
+        """Load an example program (called from JavaScript)"""
+        if key in self.examples:
+            document.getElementById("code-editor").value = self.examples[key]["code"]
+            self.storage.save_current_code(self.examples[key]["code"])
+            self.hide_modal("files-modal")
+            self.show_status(f"Loaded example: {self.examples[key]['name']}", "success")
+        else:
+            self.show_error(f"Example '{key}' not found")
+
+    def delete_program(self, name):
+        """Delete a saved program (called from JavaScript)"""
+        if self.storage.delete_program(name):
+            self.populate_programs_list()
+            self.show_status(f"Deleted program '{name}'", "success")
+        else:
+            self.show_error(f"Failed to delete program '{name}'")
+
+    def delete_file(self, name):
+        """Delete an uploaded file (called from JavaScript)"""
+        if self.storage.delete_uploaded_file(name):
+            self.populate_data_files_list()
+            self.show_status(f"Deleted file '{name}'", "success")
+        else:
+            self.show_error(f"Failed to delete file '{name}'")
+
+    def show_modal(self, modal_id):
+        """Show a modal dialog"""
+        modal = document.getElementById(modal_id)
+        modal.classList.add("show")
+
+    def hide_modal(self, modal_id):
+        """Hide a modal dialog"""
+        modal = document.getElementById(modal_id)
+        modal.classList.remove("show")
+
+    def on_modal_cancel(self, event):
+        """Handle modal cancel - close all modals"""
+        modals = document.querySelectorAll(".modal")
+        for modal in modals:
+            modal.classList.remove("show")
 
     async def load_modules_async(self):
         """Load WASM module factories asynchronously"""
@@ -249,6 +634,16 @@ class MMIXPlayground:
 
             mmix_module = await self.mmix_factory(mmix_config)
             console.log(f"mmix module instance created")
+
+            # Write uploaded files to MEMFS so programs can access them
+            uploaded_files = self.storage.get_uploaded_files()
+            if len(uploaded_files) > 0:
+                console.log(f"Writing {len(uploaded_files)} uploaded files to MEMFS...")
+                for file_info in uploaded_files:
+                    filename = file_info["name"]
+                    content = file_info["content"]
+                    mmix_module.FS.writeFile(f"/{filename}", content)
+                    console.log(f"Wrote uploaded file: /{filename}")
 
             # Write object code to MEMFS
             mmix_module.FS.writeFile("/program.mmo", object_code)
@@ -465,15 +860,6 @@ class MMIXPlayground:
             self.show_error(error_msg)
             self.show_status("Simulation failed", "error")
 
-    def on_example_change(self, event):
-        """Handle example selection change"""
-        example_key = event.target.value
-        if example_key and example_key in self.examples:
-            example = self.examples[example_key]
-            document.getElementById("code-editor").value = example["code"]
-            self.clear_output()
-            self.show_status(f"Loaded example: {example['name']}")
-            document.getElementById("run-btn").disabled = True
 
     def on_tab_click(self, event):
         """Handle tab click"""
@@ -530,3 +916,6 @@ class MMIXPlayground:
 console.log("Creating MMIXPlayground instance...")
 playground = MMIXPlayground()
 console.log("MMIXPlayground initialized")
+
+# Expose to JavaScript for onclick handlers
+js.window.playground = playground
