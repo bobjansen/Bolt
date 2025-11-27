@@ -9,6 +9,7 @@ class StorageManager:
 
     def __init__(self):
         self.CURRENT_CODE_KEY = "mmix.currentCode"
+        self.CURRENT_ARGS_KEY = "mmix.currentArgs"
         self.PROGRAMS_KEY = "mmix.programs"
         self.FILES_KEY = "mmix.uploadedFiles"
 
@@ -26,6 +27,22 @@ class StorageManager:
             return code if code else ""
         except Exception as e:
             console.error(f"Error loading current code: {e}")
+            return ""
+
+    def save_current_args(self, args):
+        """Auto-save current arguments"""
+        try:
+            localStorage.setItem(self.CURRENT_ARGS_KEY, args)
+        except Exception as e:
+            console.error(f"Error saving current args: {e}")
+
+    def load_current_args(self):
+        """Load auto-saved arguments"""
+        try:
+            args = localStorage.getItem(self.CURRENT_ARGS_KEY)
+            return args if args else ""
+        except Exception as e:
+            console.error(f"Error loading current args: {e}")
             return ""
 
     def save_program(self, name, code):
@@ -171,6 +188,15 @@ class MMIXPlayground:
         document.getElementById("files-btn").onclick = create_proxy(self.on_files_click)
         document.getElementById("files-close-btn").onclick = create_proxy(self.on_modal_cancel)
 
+        # Args modal
+        document.getElementById("args-btn").onclick = create_proxy(self.on_edit_args_click)
+        document.getElementById("edit-args-btn").onclick = create_proxy(self.on_edit_args_click)
+        document.getElementById("args-done-btn").onclick = create_proxy(self.on_args_done)
+        document.getElementById("args-clear-btn").onclick = create_proxy(self.on_args_clear)
+        document.getElementById("args-assemble-run-btn").onclick = create_proxy(self.on_args_assemble_run)
+        args_input = document.getElementById("args-input")
+        args_input.oninput = create_proxy(self.on_args_change)
+
         # File tabs
         file_tabs = document.querySelectorAll(".file-tab")
         for tab in file_tabs:
@@ -199,10 +225,55 @@ class MMIXPlayground:
             document.getElementById("code-editor").value = self.examples["hello"]["code"]
             console.log("Loaded default hello example")
 
+        # Restore args
+        saved_args = self.storage.load_current_args()
+        if saved_args:
+            document.getElementById("args-input").value = saved_args
+            self.update_args_display()
+            console.log("Restored args from localStorage")
+
     def on_code_change(self, event):
         """Handle code editor changes - auto-save"""
         code = document.getElementById("code-editor").value
         self.storage.save_current_code(code)
+
+    def on_args_change(self, event):
+        """Handle args input changes - auto-save and update display"""
+        args = document.getElementById("args-input").value
+        self.storage.save_current_args(args)
+        self.update_args_display()
+
+    def update_args_display(self):
+        """Update the args display row visibility and content"""
+        args = document.getElementById("args-input").value.strip()
+        args_display = document.getElementById("args-display")
+        args_display_value = document.getElementById("args-display-value")
+
+        if args:
+            args_display_value.value = args
+            args_display.style.display = "flex"
+        else:
+            args_display.style.display = "none"
+
+    def on_edit_args_click(self, event):
+        """Show args modal"""
+        self.show_modal("args-modal")
+
+    def on_args_done(self, event):
+        """Close args modal"""
+        self.hide_modal("args-modal")
+
+    def on_args_clear(self, event):
+        """Clear the args input"""
+        args_input = document.getElementById("args-input")
+        args_input.value = ""
+        self.storage.save_current_args("")
+        self.update_args_display()
+
+    def on_args_assemble_run(self, event):
+        """Close args modal and trigger assemble & run"""
+        self.hide_modal("args-modal")
+        self.on_assemble_run_click(event)
 
     def on_files_click(self, event):
         """Show files modal with all tabs"""
@@ -330,9 +401,10 @@ class MMIXPlayground:
         html_parts = []
         for prog in programs:
             name = prog["name"]
+            display_name = f"{name}.mms"  # Show with extension
             html_parts.append(f'''
                 <div class="program-item">
-                    <span class="program-name">{name}</span>
+                    <span class="program-name">{display_name}</span>
                     <div class="program-actions">
                         <button class="btn btn-small" onclick="playground.load_program('{name}')">Load</button>
                         <button class="btn btn-small" onclick="playground.delete_program('{name}')">Delete</button>
@@ -645,17 +717,39 @@ class MMIXPlayground:
                     mmix_module.FS.writeFile(f"/{filename}", content)
                     console.log(f"Wrote uploaded file: /{filename}")
 
+            # Also write saved programs to MEMFS so they can be used as input
+            saved_programs = self.storage.get_programs()
+            if len(saved_programs) > 0:
+                console.log(f"Writing {len(saved_programs)} saved programs to MEMFS...")
+                for prog in saved_programs:
+                    # Save with .mms extension
+                    filename = f"{prog['name']}.mms"
+                    content = prog["code"]
+                    mmix_module.FS.writeFile(f"/{filename}", content)
+                    console.log(f"Wrote program file: /{filename}")
+
             # Write object code to MEMFS
             mmix_module.FS.writeFile("/program.mmo", object_code)
 
             # Redirect stdout to a file instead of trying to intercept writes
             console.log("Redirecting stdout to file...")
 
+            # Get user-provided arguments
+            args_input = document.getElementById("args-input").value.strip()
+            user_args = []
+            if args_input:
+                # Simple split on spaces - could be enhanced to handle quoted strings
+                user_args = [arg for arg in args_input.split() if arg]
+                console.log(f"User provided args: {user_args}")
+
             # Run simulator with output redirected: mmix /program.mmo > /output.txt
             # We'll use the shell-like redirection by running with -q flag and capturing
             console.log("Running mmix simulator...")
-            args = to_js(["-q", "/program.mmo"])  # -q for quiet mode (suppresses extra output)
-            console.log(f"Calling mmix with args: {args}")
+            # Build args: mmix -q /program.mmo [user_args]
+            # Args must come AFTER the object file
+            args_list = ["-q", "/program.mmo"] + user_args
+            args = to_js(args_list)
+            console.log(f"Calling mmix with args: {args_list}")
 
             # Run the simulation
             exit_code = mmix_module.callMain(args)

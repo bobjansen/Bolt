@@ -22,9 +22,15 @@
                     <button id="assemble-btn" class="btn btn-secondary">Assemble</button>
                     <button id="run-btn" class="btn btn-success" disabled>Run</button>
                     <span class="toolbar-separator"></span>
+                    <button id="args-btn" class="btn btn-secondary">Args</button>
                     <button id="files-btn" class="btn btn-secondary">Files</button>
                     <input type="file" id="import-file-input" accept=".mms,.mmixal" style="display: none;">
                     <input type="file" id="upload-data-file-input" style="display: none;">
+                </div>
+                <div id="args-display" style="display: none;">
+                    <label>Args:</label>
+                    <input type="text" id="args-display-value" readonly>
+                    <button id="edit-args-btn" class="btn btn-secondary">Edit</button>
                 </div>
                 <textarea id="code-editor" spellcheck="false" placeholder="Enter MMIX assembly code here...
 
@@ -68,7 +74,7 @@ String  BYTE &quot;Hello, World!&quot;,#a,0
         },
         "copy": {
             "name": "Copy Program",
-            "code": "% SAMPLE PROGRAM: COPY A GIVEN FILE TO STANDARD OUTPUT\n\nt        IS   $255\nargc     IS   $0\nargv     IS   $1\ns        IS   $2\nBuf_Size IS   5                 ridiculously small for testing\n         LOC  Data_Segment\nBuffer   LOC  @+Buf_Size\n         GREG @\nArg0     OCTA 0,TextRead\nArg1     OCTA Buffer,Buf_Size\n      \n         LOC  #200              main(argc,argv) {\nMain     CMP  t,argc,2          if (argc==2) goto openit\n         PBZ  t,OpenIt\n         GETA t,1F              fputs(\"Usage: \",stderr)\n         TRAP 0,Fputs,StdErr\n         LDOU t,argv,0          fputs(argv[0],stderr)\n         TRAP 0,Fputs,StdErr\n         GETA t,2F              fputs(\" filename\\n\",stderr)\nQuit     TRAP 0,Fputs,StdErr    \n         NEG  t,0,1             quit: exit(-1)\n         TRAP 0,Halt,0\n1H       BYTE \"Usage: \",0\n         LOC  (@+3)&-4          align to tetrabyte\n2H       BYTE \" filename\",#a,0\n\nOpenIt   LDOU s,argv,8          openit: s=argv[1]\n         STOU s,Arg0\n         LDA  t,Arg0            t=&Arg0\n         TRAP 0,Fopen,3         fopen(Arg0.name,Arg0.mode,handle)\n         BN   t,Quit            if (t<0) quit()\n"
+            "code": "* SAMPLE PROGRAM: COPY A GIVEN FILE TO STANDARD OUTPUT\n\nt        IS   $255\nargc     IS   $0\nargv     IS   $1\ns        IS   $2\nBuf_Size IS   5                 ridiculously small for testing\n         LOC  Data_Segment\nBuffer   LOC  @+Buf_Size\n         GREG @\nArg0     OCTA 0,TextRead\nArg1     OCTA Buffer,Buf_Size\n      \n         LOC  #200              main(argc,argv) {\nMain     CMP  t,argc,2          if (argc==2) goto openit\n         PBZ  t,OpenIt\n         GETA t,1F              fputs(\"Usage: \",stderr)\n         TRAP 0,Fputs,StdErr\n         LDOU t,argv,0          fputs(argv[0],stderr)\n         TRAP 0,Fputs,StdErr\n         GETA t,2F              fputs(\" filename\\n\",stderr)\nQuit     TRAP 0,Fputs,StdErr    \n         NEG  t,0,1             quit: exit(-1)\n         TRAP 0,Halt,0\n1H       BYTE \"Usage: \",0\n         LOC  (@+3)&-4          align to tetrabyte\n2H       BYTE \" filename\",#a,0\n\nOpenIt   LDOU s,argv,8          openit: s=argv[1]\n         STOU s,Arg0\n         LDA  t,Arg0            fopen(argv[1],\"r\",file[3])\n         TRAP 0,Fopen,3\n         PBNN t,CopyIt          if (no error) goto copyit\n         GETA t,1F              fputs(\"Can't open file \",stderr)\n         TRAP 0,Fputs,StdErr\n         SET  t,s               fputs(argv[1],stderr)\n         TRAP 0,Fputs,StdErr\n         GETA t,2F              fputs(\"!\\n\",stderr)\n         JMP  Quit              goto quit\n1H       BYTE \"Can't open file \",0\n         LOC  (@+3)&-4          align to tetrabyte\n2H       BYTE \"!\",#a,0\n\nCopyIt   LDA  t,Arg1            copyit:\n         TRAP 0,Fread,3         items=fread(buffer,1,buf_size,file[3])\n         BN   t,EndIt           if (items < buf_size) goto endit\n         LDA  t,Arg1            items=fwrite(buffer,1,buf_size,stdout)\n         TRAP 0,Fwrite,StdOut\n         PBNN t,CopyIt          if (items >= buf_size) goto copyit\nTrouble  GETA t,1F              trouble: fputs(\"Trouble w...!\",stderr)\n         JMP  Quit              goto quit\n1H       BYTE \"Trouble writing StdOut!\",#a,0\n\nEndIt    INCL t,Buf_Size\n         BN   t,ReadErr         if (ferror(file[3])) goto readerr\n         STO  t,Arg1+8\n         LDA  t,Arg1            n=fwrite(buffer,1,items,stdout)\n         TRAP 0,Fwrite,StdOut\n         BN   t,Trouble         if (n < items) goto trouble\n         TRAP 0,Halt,0          exit(0)\nReadErr  GETA t,1F              readerr: fputs(\"Trouble r...!\",stderr)\n         JMP  Quit              goto quit }\n1H       BYTE \"Trouble reading!\",#a,0\n"
         }
     }
     </script>
@@ -87,15 +93,16 @@ String  BYTE &quot;Hello, World!&quot;,#a,0
             <div id="programs-pane" class="file-pane active">
                 <div class="file-pane-header">
                     <label for="save-name-input">Save current program as:</label>
-                    <div style="display: flex; gap: 8px;">
+                    <div class="save-input-group">
                         <input type="text" id="save-name-input" placeholder="my-program">
-                        <button id="save-confirm-btn" class="btn btn-primary">Save</button>
+                        <button id="save-confirm-btn" class="btn" style="margin-bottom: 20px">Save</button>
                     </div>
                 </div>
                 <div id="programs-list"></div>
                 <div class="file-pane-footer">
                     <button id="import-btn" class="btn btn-secondary">Import .mms File</button>
                     <button id="export-btn" class="btn btn-secondary">Export Current</button>
+                    <button id="files-close-btn" class="btn btn-secondary">Close</button>
                 </div>
             </div>
 
@@ -111,13 +118,23 @@ String  BYTE &quot;Hello, World!&quot;,#a,0
                 </div>
                 <div id="data-files-list"></div>
             </div>
+        </div>
+    </div>
 
+    <!-- Args modal -->
+    <div id="args-modal" class="modal">
+        <div class="modal-content">
+            <h2>Program Arguments</h2>
+            <label for="args-input">Arguments (space-separated):</label>
+            <input type="text" id="args-input" placeholder="e.g., filename.txt">
             <div class="modal-buttons">
-                <button id="files-close-btn" class="btn btn-secondary">Close</button>
+                <button id="args-clear-btn" class="btn btn-secondary">Clear</button>
+                <button id="args-assemble-run-btn" class="btn btn-primary">Assemble &amp; Run</button>
+                <button id="args-done-btn" class="btn btn-secondary">Done</button>
             </div>
         </div>
     </div>
 
-    <script type="py" src="mmix-playground.py?v=9" config="pyscript.toml"></script>
+    <script type="py" src="mmix-playground.py?v=17" config="pyscript.toml"></script>
 </body>
 </html>
